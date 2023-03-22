@@ -63,7 +63,6 @@ export class App extends Component {
 
             return this.resetImages();
           }
-
           this.setState(prevState => {
             return { isLoading: !prevState.isLoading };
           });
