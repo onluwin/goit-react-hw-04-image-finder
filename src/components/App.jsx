@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { useState, useEffect } from 'react';
 
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -18,125 +18,93 @@ import {
 import { Error } from './Error';
 import { Loader } from './Loader';
 
-export class App extends Component {
-  state = {
-    query: '',
-    images: [],
-    largeImageURL: '',
-    shouldShowModal: false,
-    isLoading: false,
-    error: false,
-    page: 1,
-  };
+export const App = () => {
+  const [query, setQuery] = useState('');
+  const [images, setImages] = useState([]);
+  const [largeImageURL, setLargeImageURL] = useState('');
+  const [shouldShowModal, setShouldShowModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [page, setPage] = useState(1);
 
-  componentDidUpdate(_, prevState) {
-    const prevQuery = prevState.query;
-    const prevPage = prevState.page;
-    const { query, page } = this.state;
-
-    if (prevQuery !== query || prevPage !== page) {
-      this.getImage(query);
+  useEffect(() => {
+    if (!query) {
+      return;
     }
-  }
+    const getImage = query => {
+      try {
+        fetchQuery(query, page)
+          .then(response => {
+            const { hits, total } = response;
+            if (!hits.length) {
+              toast.error(
+                `Ooops, there are no images with that query: ${query}`,
+                { position: 'top-right' }
+              );
+              setIsLoading(prevLoading => !prevLoading);
 
-  resetPage = () => this.setState({ page: 1 });
-  incrementPage = () => {
-    this.setState(prevState => {
-      return { page: prevState.page + 1 };
-    });
-  };
-  resetImages = () => this.setState({ images: [] });
-  getImage = query => {
-    const { page } = this.state;
-    try {
-      fetchQuery(query, page)
-        .then(response => {
-          const { hits, total } = response;
-          if (!hits.length) {
-            toast.error(
-              `Ooops, there are no images with that query: ${query}`,
-              { position: 'top-right' }
-            );
-            this.setState(prevState => {
-              return { isLoading: !prevState.isLoading };
-            });
+              return resetImages();
+            }
+            setIsLoading(prevLoading => !prevLoading);
 
-            return this.resetImages();
-          }
-          this.setState(prevState => {
-            return { isLoading: !prevState.isLoading };
-          });
+            calculateTotalPages(total);
+            if (!isShowLoadMore(page)) {
+              toast.success(
+                'We are ssory, but you have reached the end of search results',
+                { position: 'top-right' }
+              );
+            }
+            setImages(prevImages => [...prevImages, ...hits]);
+          })
+          .catch(() => setError(true));
+      } catch {
+        setError(true);
+      } finally {
+        setIsLoading(prevLoading => !prevLoading);
+      }
+    };
+    getImage(query);
+  }, [query, page]);
 
-          calculateTotalPages(total);
-          if (!isShowLoadMore(page)) {
-            toast.success(
-              'We are ssory, but you have reached the end of search results',
-              { position: 'top-right' }
-            );
-          }
-          this.setState(prevState => {
-            return { images: [...prevState.images, ...hits] };
-          });
-        })
-        .catch(() => this.setState({ error: true }));
-    } catch {
-      this.setState({ error: true });
-    } finally {
-      this.setState(prevState => {
-        return { isLoading: !prevState.isLoading };
-      });
-    }
-  };
+  const resetPage = () => setPage(1);
+  const incrementPage = () => setPage(prevPage => prevPage + 1);
+  const resetImages = () => setImages([]);
 
-  onSubmit = e => {
+  const onSubmit = e => {
     e.preventDefault();
 
     const value = e.target.elements.query.value.trim();
     if (!value) {
       return;
     }
-    this.setState(prevState => {
-      if (value !== this.state.query) {
-        this.resetImages();
-        this.resetPage();
-        resetTotalPages();
-        return;
-      }
-    });
-
-    this.setState({ query: value });
+    if (value !== query) {
+      resetImages();
+      resetPage();
+      resetTotalPages();
+      setQuery(value);
+    }
   };
-  handleLoadMoreClick = e => {
-    this.incrementPage();
-  };
+  const handleLoadMoreClick = () => incrementPage();
 
-  toggleModal = largeImageURL => {
-    this.setState(({ shouldShowModal }) => ({
-      shouldShowModal: !shouldShowModal,
-      largeImageURL,
-    }));
+  const toggleModal = largeImageURL => {
+    setShouldShowModal(prevShowModal => !prevShowModal);
+    setLargeImageURL(largeImageURL);
   };
 
-  render() {
-    const { images, shouldShowModal, largeImageURL, isLoading, error, page } =
-      this.state;
-    return (
-      <>
-        <Searchbar onSubmit={this.onSubmit} />
+  return (
+    <>
+      <Searchbar onSubmit={onSubmit} />
 
-        {error && <Error message={`We're sorry but something went wrong`} />}
-        {images && (
-          <ImageGallery images={images} toggleModal={this.toggleModal} />
-        )}
-        {isLoading && <Loader />}
-        {!isLoading && isShowLoadMore(page) && (
-          <LoadMoreBtn handleLoadMoreClick={this.handleLoadMoreClick} />
-        )}
-        {shouldShowModal && (
-          <Modal largeImageURL={largeImageURL} toggleModal={this.toggleModal} />
-        )}
-        <Toaster />
-      </>
-    );
-  }
-}
+      {error && <Error message={`We're sorry but something went wrong`} />}
+      {images && <ImageGallery images={images} toggleModal={toggleModal} />}
+      {isLoading && <Loader />}
+      {!isLoading && isShowLoadMore(page) && (
+        <LoadMoreBtn handleLoadMoreClick={handleLoadMoreClick} />
+      )}
+      {shouldShowModal && (
+        <Modal largeImageURL={largeImageURL} toggleModal={toggleModal} />
+      )}
+      <Toaster />
+    </>
+  );
+};
